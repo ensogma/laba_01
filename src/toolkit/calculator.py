@@ -1,118 +1,163 @@
-# from .errors import EmptyExpressionError
-# from errors import ToolkitError
-from errors import (
-    TwoBinaryOperatorsError,
+from .errors import (
+    DivisionByZeroError,
     EmptyExpressionError,
+    InvalidCharacterError,
+    InvalidValueError,
     MissingOperandError,
-    UnknownUnitError,
-    
+    TwoBinaryOperatorsError,
+    UnbalancedParenthesesError,
 )
-a='1.05+3.2--=-(23.5+8.1)/2.7-(+6.8)/2+'
-a='3\t+\n4'
-a='12+2543-34*4/5'
+
+OPERATORS = {"+", "-", "*", "/", "(", ")"}
+BINARY = {"+", "-", "*", "/"}
+SIGNS = {"+", "-"}
+DIGITS = set("0123456789")
 
 
-
-a='3+4'
-a='3 - -2'
-a='3 * -2'
-a='*2'
-a='3 +'
-a='3 + * 2'
-a='3 5'
-
-
-
-import re
-
-
-# _GAP_RE = re.compile(r"[0-9.]\s+[0-9.]")
-
-
-# def check_gaps(a: str) -> None:
-#     if _GAP_RE.search(a):
-#         raise MissingOperandError("missed unary beetween nums")
-# check_gaps(a)
-OPERATORS = {"+","-","*","/"}
-SIGNS = {"+","-"}
-# while ' ' in a:
-#     a=a.replace(' ', '')
-# a=''
-
-print(a)
-nums='0123456789'
-DIGITS=set('0123456789')
 def is_num(tok):
-    if tok.count('.')>1:
+    if tok.count(".") > 1:
         return False
-    digits_only = tok.replace('.','')
-    return digits_only !='' and  set(digits_only)<=DIGITS
-# print(DIGITS)
+    digits_only = tok.replace(".", "")
+    return digits_only != "" and set(digits_only) <= DIGITS
 
 
 def tokenization(a):
-    cur_n = ''
+    cur_n = ""
     tokens = []
     for c in a:
-        if c in nums:
-            cur_n+=c 
-        elif c=='.':
-            cur_n+=c
+        if c in DIGITS or c == ".":
+            cur_n += c
         else:
-            if len(cur_n)!=0 and c!=' ':
+            if len(cur_n) != 0:
+                if cur_n.count(".") > 1 or cur_n == ".":
+                    raise InvalidValueError(f"неверное число '{cur_n}'")
                 tokens.append(cur_n)
-                cur_n=''
-            if c!=' ':
-                tokens.append(c)
-    if len(cur_n)!=0 and c!=' ':
+                cur_n = ""
+            if c.isspace():
+                continue
+            if c not in OPERATORS:
+                raise InvalidCharacterError(f"недопустимый символ '{c}'")
+            tokens.append(c)
+    if len(cur_n) != 0:
+        if cur_n.count(".") > 1 or cur_n == ".":
+            raise InvalidValueError(f"неверное число '{cur_n}'")
         tokens.append(cur_n)
+    if not tokens:
+        raise EmptyExpressionError("пустое выражение")
     return tokens
-tokenized = tokenization(a)
-print(tokenized)
-# for el in tokenized:
-    # print(is_num(el),end=' ')
-# print(' ')
-# kal = ['1++++4',
-#        '1*+2',
-#        '',
-#        ] 
-# print(is_num('3'))
+
+
 def validation(tokenized):
+    beggining = True
     if not tokenized:
-        raise EmptyExpressionError('empty expression')
-    if "+" not in set(a) or "-" not in set(a) or "*" not in set(a) or "/" not in set(a):
-        print
+        raise EmptyExpressionError("empty expression")
     expect_num = True
     prev_was_unary = False
-    beggining=True
+    depth = 0
+    prev = ""
     for c in tokenized:
         is_op = c in OPERATORS
-        is_dig = is_num(c)
-        if c not in OPERATORS and not is_dig:
-            raise UnknownUnitError(f"Unknwon unit '{c}")
+        if expect_num:
+            if c == "(":
+                depth += 1
+                prev_was_unary = False
+            elif c == ")":
+                raise MissingOperandError(f"missed operand before '{c}'")
+            elif not is_op:
+                expect_num = False
+                prev_was_unary = False
+            elif c in SIGNS and not prev_was_unary:
+                prev_was_unary = True
+            elif prev in BINARY:
+                raise TwoBinaryOperatorsError(f"lots of operators: '{prev}' and '{c}'")
+            elif beggining != True or beggining and c in "*/":
+                raise MissingOperandError(f"missed operand before '{c}'")
         else:
-            if expect_num:
-                if not is_op:
-                    expect_num=False
-                    prev_was_unary=False
-                elif c in SIGNS and not prev_was_unary:
-                    prev_was_unary=True
-                elif beggining:
-                    beggining=False
-                    raise MissingOperandError(f"missed operand before '{c}'")
-                else:
-                    raise TwoBinaryOperatorsError(
-                        f" lots of operators "
-                    )
-            else:
-                if not is_op:
-                    raise MissingOperandError("missed operand")    
-                expect_num=True
-        beggining=False
+            if c == ")":
+                depth -= 1
+                if depth < 0:
+                    raise UnbalancedParenthesesError("extra closing parenthesis")
+            elif c in BINARY:
+                expect_num = True
+                prev_was_unary = False
+            elif beggining != True:
+                raise MissingOperandError(f"missed operator before '{c}'")
+            elif beggining and c in "*/":
+                raise MissingOperandError(f"missed operand before '{c}'")
+        beggining = False
+        prev = c
+    if depth > 0:
+        raise UnbalancedParenthesesError("unclosed parenthesis")
     if expect_num:
-        raise MissingOperandError(f"expression finishes by{tokenized[-1]}")
-    # return(0)
-validation(tokenized)
+        raise MissingOperandError(f"expression finishes by '{tokenized[-1]}'")
 
-def calculation():
-    pass
+
+def priorities(op):
+    if op == "neg":
+        return 3
+    elif op in "*/":
+        return 2
+    elif op in "-+":
+        return 1
+
+
+def calculation(tokens):
+
+    def transition():
+        stack = []
+        out = []
+
+        for i in range(len(tokens)):
+            tok = tokens[i]
+            if is_num(tok):
+                out.append(tok)
+            elif tok in SIGNS and (
+                i == 0 or tokens[i - 1] in BINARY or tokens[i - 1] == "("
+            ):
+                if tok == "-":
+                    stack.append("neg")
+            elif tok in BINARY:
+                while (
+                    stack
+                    and stack[-1] != "("
+                    and priorities(stack[-1]) >= priorities(tok)
+                ):
+                    out.append(stack.pop())
+                stack.append(tok)
+            elif tok == "(":
+                stack.append(tok)
+            else:
+                while stack[-1] != "(":
+                    out.append(stack.pop())
+                stack.pop()
+        while stack:
+            out.append(stack.pop())
+        return out
+
+    rpn = transition()
+    stack = []
+    for tok in rpn:
+        if tok == "neg":
+            stack.append(-stack.pop())
+        elif tok in BINARY:
+            y = stack.pop()
+            x = stack.pop()
+            if tok == "+":
+                stack.append(x + y)
+            elif tok == "-":
+                stack.append(x - y)
+            elif tok == "*":
+                stack.append(x * y)
+            else:
+                if y == 0:
+                    raise DivisionByZeroError("деление на ноль")
+                stack.append(x / y)
+        else:
+            stack.append(float(tok))
+    return stack[0]
+
+
+def calculate(expression):
+    tokenized = tokenization(expression)
+    validation(tokenized)
+    return calculation(tokenized)

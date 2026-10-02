@@ -1,5 +1,5 @@
 class ToolkitError(Exception):
-    'basic error'
+    "basic error"
 
 
 #       --calculator--
@@ -35,3 +35,10 @@ class IncompatibleUnitsError(ToolkitError):
 class InvalidValueError(ToolkitError):
     """invalid value"""
 
+
+class UnbalancedParenthesesError(ToolkitError):
+    """unbalanced parentheses error"""
+
+
+class BelowAbsoluteZeroError(ToolkitError):
+    """below absolute zero"""
