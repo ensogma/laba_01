@@ -1,4 +1,4 @@
-````markdown
+
 
 Python-пакет `toolkit` с CLI: калькулятор и конвертер величин.
 
@@ -70,4 +70,3 @@ python -m pytest
 ruff check .
 python -m toolkit --help
 ```
-````
